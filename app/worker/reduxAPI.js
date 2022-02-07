@@ -70,6 +70,26 @@ function getLiftedState(store, filters) {
   return filterStagedActions(store.liftedStore.getState(), filters);
 }
 
+const delayedMessages = [];
+let delayedTimeout = null;
+
+const sendDelayed = () => {
+  if (delayedTimeout) {
+    return;
+  }
+
+  delayedTimeout = setTimeout(() => {
+    delayedTimeout = null;
+
+    const message = delayedMessages.shift();
+    postMessage(message);
+
+    if (delayedMessages.length) {
+      sendDelayed();
+    }
+  }, 0);
+};
+
 function relay(type, state, instance, action, nextActionId) {
   const {
     filters,
@@ -117,7 +137,8 @@ function relay(type, state, instance, action, nextActionId) {
       serialize: !!instance.serialize,
     };
   }
-  postMessage({ __IS_REDUX_NATIVE_MESSAGE__: true, content: message });
+  delayedMessages.push({ __IS_REDUX_NATIVE_MESSAGE__: true, content: message });
+  sendDelayed();
 }
 
 function dispatchRemotely(action, instance) {
@@ -148,7 +169,7 @@ function exportState({ id: instanceId, store, serializeState }) {
   liftedState.stagedActionIds.slice(1).forEach(id => {
     payload.push(actionsById[id].action);
   });
-  postMessage({
+  delayedMessages.push({
     __IS_REDUX_NATIVE_MESSAGE__: true,
     content: {
       type: 'EXPORT',
@@ -160,6 +181,7 @@ function exportState({ id: instanceId, store, serializeState }) {
       instanceId,
     },
   });
+  sendDelayed();
 }
 
 function handleMessages(message) {
